@@ -120,11 +120,10 @@ GifInput::GifInput(std::shared_ptr<IOChannel> in)
 GifInput::~GifInput()
 {
     // Clean up allocated data.
-#if GIFLIB_MAJOR == 5 && GIFLIB_MINOR >= 1 || GIFLIB_MAJOR > 5
-    int errorCode;
-    DGifCloseFile(_gif, &errorCode);
+#if GIFLIB_MAJOR==5 && GIFLIB_MINOR==1
+	DGifCloseFile(_gif, 0);
 #else
-    DGifCloseFile(_gif);
+	DGifCloseFile(_gif);
 #endif
 }
 

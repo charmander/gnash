@@ -186,11 +186,7 @@ VideoDecoderFfmpeg::init(enum CODECID codecId, int /*width*/, int /*height*/,
         throw MediaException(_("libavcodec can't decode this video format"));
     }
 
-#if LIBAVCODEC_VERSION_INT > AV_VERSION_INT(53,8,0)
     _videoCodecCtx.reset(new CodecContextWrapper(avcodec_alloc_context3(_videoCodec)));
-#else
-    _videoCodecCtx.reset(new CodecContextWrapper(avcodec_alloc_context()));
-#endif
     if (!_videoCodecCtx->getContext()) {
         throw MediaException(_("libavcodec couldn't allocate context"));
     }
@@ -217,11 +213,7 @@ VideoDecoderFfmpeg::init(enum CODECID codecId, int /*width*/, int /*height*/,
     }
 #endif
 
-#if LIBAVCODEC_VERSION_INT > AV_VERSION_INT(53,8,0)
     int ret = avcodec_open2(ctx, _videoCodec, nullptr);
-#else
-    int ret = avcodec_open(ctx, _videoCodec);
-#endif
     if (ret < 0) {
         boost::format msg = boost::format(_("libavcodec "
                             "failed to initialize FFMPEG "
@@ -367,36 +359,35 @@ VideoDecoderFfmpeg::decode(const std::uint8_t* input,
 
     std::unique_ptr<image::GnashImage> ret;
 
-    AVFrame* frame = FRAMEALLOC();
+    std::unique_ptr<AVFrame, decltype(av_free)*> frame(FRAMEALLOC(), av_free);
     if ( ! frame ) {
         log_error(_("Out of memory while allocating avcodec frame"));
         return ret;
     }
 
-    int bytes = 0;    
+    int got_frame = 0;
     // no idea why avcodec_decode_video wants a non-const input...
-#if LIBAVCODEC_VERSION_MAJOR >= 53
     AVPacket pkt;
     av_init_packet(&pkt);
     pkt.data = const_cast<uint8_t*>(input);
     pkt.size = input_size;
-    avcodec_decode_video2(_videoCodecCtx->getContext(), frame, &bytes,
-            &pkt);
-#else
-    avcodec_decode_video(_videoCodecCtx->getContext(), frame, &bytes,
-            input, input_size);
-#endif
+    int bytesConsumed = avcodec_decode_video2(_videoCodecCtx->getContext(),
+                                              frame.get(), &got_frame, &pkt);
     
-    if (!bytes) {
-        log_error(_("Decoding of a video frame failed"));
-        av_free(frame);
+    if (bytesConsumed < 0) {
+        log_error(_("Decoding of a video frame failed: %1%"), bytesConsumed);
+        return ret;
+    }
+    if (bytesConsumed < input_size) {
+        log_error("only %1% of %2% bytes consumed", bytesConsumed, input_size);
+    }
+    if (!got_frame) {
+        log_debug("Decoding succeeded, but no frame is available yet.");
         return ret;
     }
 
     ret = frameToImage(_videoCodecCtx->getContext(), *frame);
 
-    // FIXME: av_free doesn't free frame->data!
-    av_free(frame);
     return ret;
 }
 
