@@ -220,7 +220,7 @@ BUILDDATE="`date +%Y%m%d`"
 AC_SUBST(BUILDDATE)
 
 dnl These are required by automake
-AM_INIT_AUTOMAKE([subdir-objects])
+AM_INIT_AUTOMAKE
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AM_MAINTAINER_MODE
 AC_PROG_MAKE_SET
@@ -2897,18 +2897,23 @@ AC_ARG_ENABLE([harden],
   [harden=yes]
 )
 
-if test x"$harden" = x"yes" -a x"${host_cpu}" != x"mips" -a x"${android}" != x"yes" -a x"$GCC" = x"yes"; then
-    CPPFLAGS="${CPPFLAGS} -D_FORTIFY_SOURCE=2"
-    CFLAGS="${CFLAGS} -fPIE -fstack-protector --param ssp-buffer-size=4 -Wformat -Werror=format-security"
-    CXXFLAGS="${CXXFLAGS} -fPIE -fstack-protector --param ssp-buffer-size=4 -Wformat -Werror=format-security"
+AC_DEFUN([ADD_HARDENING_FLAGS],[
+   AX_APPEND_COMPILE_FLAGS([-fpie -fPIE -Wformat -Werror=format-security])
 
-    if test x"$with_gnu_ld" = x"yes"; then
-      LDFLAGS="${LDFLAGS} -fPIE -pie -Wl,-z,relro -Wl,-z,now"
-    elif test x"$darwin" = x"yes"; then
-      LDFLAGS="${LDFLAGS} -fPIE -pie"
-    else
-      LDFLAGS="${LDFLAGS}"
-    fi
+   AX_CHECK_COMPILE_FLAG([-fstack-protector-strong],
+     [AX_APPEND_FLAG([-fstack-protector-strong])],
+     [AX_APPEND_COMPILE_FLAGS(["-fstack-protector --param ssp-buffer-size=4"])])
+])
+
+if test x"$harden" = x"yes"; then
+  CPPFLAGS="${CPPFLAGS} -D_FORTIFY_SOURCE=2"
+
+  ADD_HARDENING_FLAGS
+  AC_LANG_PUSH(C++)
+  ADD_HARDENING_FLAGS
+  AC_LANG_POP(C++)
+
+  AX_APPEND_LINK_FLAGS([-fPIE -pie -Wl,-z,relro -Wl,-z,now])
 fi
 
 dnl Define convenience constants so Gnash can print out the
@@ -2926,8 +2931,8 @@ AC_SUBST(HWACCEL_CONFIG)
 
 dnl check for missing libraries and disable them.
 if test x"$BOOST_LIBS" != x; then
-  if test x"${cygnal_missing_libs}" != x; then
-    for i in ${cygnal_missing_libs}; do
+  if test x"${missing_cygnal_libs}" != x; then
+    for i in ${missing_cygnal_libs}; do
       if test $i = serialization; then
         AC_DEFINE([BOOST_MULTI_INDEX_DISABLE_SERIALIZATION], ["1"], [if the library is missing, don't use it.])
       fi
@@ -3819,13 +3824,25 @@ if test x"$BOOST_LIBS" != x; then
   fi
 
   if test x"${cygnal}" = x"yes"; then
-    if test x"${cygnal_missing_libs}" != x; then
-      for i in ${cygnal_missing_libs}; do
+    if test x"${missing_cygnal_libs}" != x; then
+      for i in ${missing_cygnal_libs}; do
         PKG_ERR([No Boost $i package installed])
         PKG_SUGGEST([Install it from http://www.boost.org])
         debtmppkg="libboost-`echo ${i} | sed 's/_/-/g'`-dev"
         DEB_INSTALL([$debtmppkg])
         PKG_ALTERNATIVE([or configure with --disable-cygnal])
+      done
+    fi
+  fi
+
+  if test x"${npapi}" = x"yes"; then
+    if test x"${missing_plugin_libs}" != x; then
+      for i in ${missing_plugin_libs}; do
+        PKG_ERR([No Boost $i package installed])
+        PKG_SUGGEST([Install it from http://www.boost.org])
+        debtmppkg="libboost-`echo ${i} | sed 's/_/-/g'`-dev"
+        DEB_INSTALL([$debtmppkg])
+        PKG_ALTERNATIVE([or configure with --disable-npapi])
       done
     fi
   fi

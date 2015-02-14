@@ -359,7 +359,7 @@ VideoDecoderFfmpeg::decode(const std::uint8_t* input,
 
     std::unique_ptr<image::GnashImage> ret;
 
-    std::unique_ptr<AVFrame, decltype(av_free)*> frame(FRAMEALLOC(), av_free);
+    std::unique_ptr<AVFrame, FrameDeleter> frame(FRAMEALLOC(), FrameDeleter());
     if ( ! frame ) {
         log_error(_("Out of memory while allocating avcodec frame"));
         return ret;
@@ -378,7 +378,7 @@ VideoDecoderFfmpeg::decode(const std::uint8_t* input,
         log_error(_("Decoding of a video frame failed: %1%"), bytesConsumed);
         return ret;
     }
-    if (bytesConsumed < input_size) {
+    if (static_cast<std::uint32_t>(bytesConsumed) < input_size) {
         log_error("only %1% of %2% bytes consumed", bytesConsumed, input_size);
     }
     if (!got_frame) {
