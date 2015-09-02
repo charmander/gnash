@@ -12,6 +12,7 @@
     <!ENTITY fdl-app          SYSTEM "fdl-appendix.xml"> 
     <!ENTITY programmers      SYSTEM "app_authors.xml">
     <!ENTITY introduction     SYSTEM "introduction.xml">
+    <!ENTITY audience         SYSTEM "refmanual/audience.xml">
     <!ENTITY bugreport        SYSTEM "bugreport.xml">
 
     <!ENTITY amf              SYSTEM "refmanual/amf.xml">
@@ -103,6 +104,7 @@
 <!-- This chapter includes all the other sections used to document the
      internals of how Gnash works. -->
   &internals;
+  &newasclass;
   &bugreport;
   &extensions;
 

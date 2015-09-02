@@ -563,6 +563,8 @@ public:
     /// - The original root movie (_rootMovie)
     /// - Mouse entities (m_mouse_button_state)
     /// - Timer targets (_intervalTimers)
+    /// - ExternalInterace callbacks (_externalCallbackMethods and
+    ///   _externalCallbackInstances)
     /// - Resources reachable by ActionQueue code (_actionQueue)
     /// - Any DisplayObject being dragged 
     void markReachableResources() const;
@@ -785,8 +787,21 @@ public:
 
     const RunResources& runResources() const { return _runResources; }
 
+    typedef std::map<std::string, as_object*> ExternalCallbackMethods;
+    typedef std::map<std::string, as_object*> ExternalCallbackInstances;
+    ExternalCallbackMethods _externalCallbackMethods;
+    ExternalCallbackInstances _externalCallbackInstances;
+
     /// Add an ExternalInterface callback object with an associated name.
-    void addExternalCallback(const std::string& name, as_object* callback);
+    //
+    /// @param name     Callback name, exposed to host container.
+    /// @param callback ActionScript function to be invoked if the callback
+    ///                 is called.
+    /// @param instance ActionScript Object to be used as "this" instance
+    ///                 inside the callback. ActionScript null value is
+    ///                 allowed.
+    void addExternalCallback(const std::string& name, as_object* callback,
+                             as_object* instance);
 
     bool processInvoke(ExternalInterface::invoke_t *);
 

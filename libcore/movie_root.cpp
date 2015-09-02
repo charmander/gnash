@@ -1598,9 +1598,15 @@ movie_root::processInvoke(ExternalInterface::invoke_t *invoke)
         VM &vm = getVM();
         std::string var = invoke->args[0].to_string();
         as_value val;
-        obj->get_member(getURI(vm, var), &val);
-        // GetVariable sends the value of the variable
-        ss << ExternalInterface::toXML(val);
+        if (obj->get_member(getURI(vm, var), &val)) {
+            // If the variable exists, GetVariable returns a string
+            // representation of its value. Variable with undefined
+            // or null value counts as exist too.
+            ss << ExternalInterface::toXML(val.to_string());
+        } else {
+            // If the variable does not exist, GetVariable sends null value
+            ss << ExternalInterface::toXML(as_value((as_object*)NULL));
+        }
     } else if (invoke->name == "GotoFrame") {
         log_unimpl(_("ExternalInterface::GotoFrame()"));
         // GotoFrame doesn't send a response
@@ -1766,6 +1772,26 @@ movie_root::markReachableResources() const
     // Mark LoadMovieRequest handlers as reachable
     _movieLoader.setReachable();
 
+    // Mark ExternalInterface callbacks and instances as reachable
+    for (std::map<std::string, as_object*>::const_iterator method_iterator
+             = _externalCallbackMethods.begin();
+         method_iterator != _externalCallbackMethods.end();
+         method_iterator++)
+    {
+        if (method_iterator->second != NULL) {
+            method_iterator->second->setReachable();
+        }
+    }
+    for (std::map<std::string, as_object*>::const_iterator instance_iterator
+             = _externalCallbackInstances.begin();
+         instance_iterator != _externalCallbackInstances.end();
+         instance_iterator++)
+    {
+        if (instance_iterator->second != NULL) {
+            instance_iterator->second->setReachable();
+        }
+    }
+
     // Mark resources reachable by queued action code
     for (size_t lvl = 0; lvl < PRIORITY_SIZE; ++lvl)
     {
@@ -1823,12 +1849,22 @@ movie_root::findDropTarget(std::int32_t x, std::int32_t y,
 }
 
 /// This should store a callback object in movie_root.
-//
-/// TODO: currently it doesn't.
 void
-movie_root::addExternalCallback(const std::string& name, as_object* callback)
+movie_root::addExternalCallback(const std::string& name, as_object* callback,
+                                as_object* instance)
 {
-    UNUSED(callback);
+    // Store registered callback and instance reference for later use
+    // by callExternalCallback()
+    if(_externalCallbackMethods.count(name)>0) {
+        _externalCallbackMethods.erase(name);
+        _externalCallbackInstances.erase(name);
+    }
+    _externalCallbackMethods.insert(
+        std::pair<std::string, as_object*>(name,callback)
+    );
+    _externalCallbackInstances.insert(
+        std::pair<std::string, as_object*>(name,instance)
+    );
 
     // When an external callback is added, we have to notify the plugin
     // that this method is available.
@@ -1889,29 +1925,38 @@ std::string
 movie_root::callExternalCallback(const std::string &name, 
                  const std::vector<as_value> &fnargs)
 {
-    MovieClip *mc = getLevel(0);
-    as_object *obj = getObject(mc);
-
-    const ObjectURI& key = getURI(getVM(), name);
-    // FIXME: there has got to be a better way of handling the variable
-    // length arg list
+    ExternalCallbackMethods::iterator method_iterator;
+    ExternalCallbackInstances::iterator instance_iterator;
+    as_object *method;
+    as_object *instance;
+    fn_call::Args args;
     as_value val;
-    switch (fnargs.size()) {
-      case 0:
-          val = callMethod(obj, key);
-          break;
-      case 1:
-          val = callMethod(obj, key, fnargs[0]);
-          break;
-      case 2:
-          val = callMethod(obj, key, fnargs[0], fnargs[1]);
-          break;
-      case 3:
-          val = callMethod(obj, key, fnargs[0], fnargs[1], fnargs[2]);
-          break;
-      default:
-          val = callMethod(obj, key);
-          break;
+
+    // Look up for ActionScript function registered as callback
+    method_iterator = _externalCallbackMethods.find(name);
+    if (method_iterator == _externalCallbackMethods.end()) {
+        val.set_undefined();
+    } else {
+        method = method_iterator->second;
+
+        // Look up for Object instance to use as "this" in the callback
+        instance_iterator = _externalCallbackInstances.find(name);
+        if (instance_iterator == _externalCallbackInstances.end()) {
+            instance = as_value((as_object*)NULL).to_object(getVM());
+        }
+        else instance = instance_iterator->second;
+
+        // Populate function call arguments
+        for (std::vector<as_value>::const_iterator args_iterator
+                 = fnargs.begin();
+             args_iterator != fnargs.end();
+             args_iterator ++)
+        {
+            args += *args_iterator;
+        }
+
+        // Call the registered callback
+        val=invoke(as_value(method), as_environment(getVM()), instance, args);
     }
 
     std::string result;
