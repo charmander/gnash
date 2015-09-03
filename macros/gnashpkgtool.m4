@@ -77,8 +77,7 @@ AC_DEFUN([GNASH_PKG_INCLUDES],
       AC_PATH_PROG(UP[]_CONFIG, $1-config)
       if test x"${UP[]_CONFIG}" != x; then
         AC_MSG_CHECKING([for $2 header using $1-config])
-        ac_cv_path_$1_incl="`${UP[]_CONFIG} --cxxflags 2>/dev/null`"
-        if test x"${ac_cv_path_$1_incl}" = x; then
+        if ! ac_cv_path_$1_incl="`${UP[]_CONFIG} --cxxflags 2>/dev/null`" || test x"${ac_cv_path_$1_incl}" = x; then
           ac_cv_path_$1_incl="`${UP[]_CONFIG} --cflags 2>/dev/null`"
         fi
         if test x"${ac_cv_path_$1_incl}" != x; then
